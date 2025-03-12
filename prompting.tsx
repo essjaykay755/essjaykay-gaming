@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useRef } from "react"
+import { useGame } from '@/app/context/GameContext';
 
 const COLOR = "#FFFFFF"
 const HIT_COLOR = "#333333"
@@ -171,6 +172,7 @@ interface SoundEffects {
 }
 
 export function EssJayKayDev() {
+  const { gameSpeed } = useGame();
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const pixelsRef = useRef<Pixel[]>([])
   const ballRef = useRef<Ball>({ x: 0, y: 0, dx: 0, dy: 0, radius: 0 })
@@ -385,6 +387,7 @@ export function EssJayKayDev() {
       const oldDx = ball.dx
       const oldDy = ball.dy
 
+      // Regular ball movement without speed multiplier
       ball.x += ball.dx
       ball.y += ball.dy
 
@@ -487,7 +490,10 @@ export function EssJayKayDev() {
     }
 
     const gameLoop = () => {
-      updateGame()
+      // Run update multiple times based on game speed
+      for (let i = 0; i < gameSpeed; i++) {
+        updateGame()
+      }
       drawGame()
       requestAnimationFrame(gameLoop)
     }
@@ -499,7 +505,7 @@ export function EssJayKayDev() {
     return () => {
       window.removeEventListener("resize", resizeCanvas)
     }
-  }, [])
+  }, [gameSpeed])
 
   return (
     <canvas

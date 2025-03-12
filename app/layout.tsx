@@ -1,5 +1,7 @@
 import type { Metadata } from 'next'
 import './globals.css'
+import { GameProvider } from './context/GameContext'
+import { CheatCodeWrapper } from './components/CheatCodeWrapper'
 
 export const metadata: Metadata = {
   title: 'EssJayKay Gaming',
@@ -14,7 +16,12 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body>{children}</body>
+      <body>
+        <GameProvider>
+          {children}
+          <CheatCodeWrapper />
+        </GameProvider>
+      </body>
     </html>
   )
 }
