@@ -198,20 +198,29 @@ export function EssJayKayDev() {
     // Create fallback sounds if the audio files don't exist
     const createOscillator = (frequency: number, type: OscillatorType = "sine", duration = 0.1) => {
       return () => {
-        const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)()
-        const oscillator = audioContext.createOscillator()
-        const gainNode = audioContext.createGain()
+        try {
+          const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)()
+          const oscillator = audioContext.createOscillator()
+          const gainNode = audioContext.createGain()
 
-        oscillator.type = type
-        oscillator.frequency.setValueAtTime(frequency, audioContext.currentTime)
-        gainNode.gain.setValueAtTime(0.3, audioContext.currentTime)
-        gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + duration)
+          oscillator.type = type
+          oscillator.frequency.setValueAtTime(frequency, audioContext.currentTime)
+          gainNode.gain.setValueAtTime(0.3, audioContext.currentTime)
+          gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + duration)
 
-        oscillator.connect(gainNode)
-        gainNode.connect(audioContext.destination)
+          oscillator.connect(gainNode)
+          gainNode.connect(audioContext.destination)
 
-        oscillator.start()
-        oscillator.stop(audioContext.currentTime + duration)
+          oscillator.start()
+          oscillator.stop(audioContext.currentTime + duration)
+
+          // Clean up
+          setTimeout(() => {
+            audioContext.close()
+          }, duration * 1000 + 100)
+        } catch (error) {
+          console.warn('Audio playback failed:', error)
+        }
       }
     }
 
@@ -226,20 +235,32 @@ export function EssJayKayDev() {
       createOscillator(500, "sine", 0.08),
     ]
 
-    // Function to play sound with fallback
+    // Function to play sound with fallback and rate limiting
     const playSound = (sound: HTMLAudioElement, fallback: () => void) => {
       const now = Date.now()
-      // Prevent sounds from playing too frequently (at least 50ms apart)
-      if (now - lastSoundTimeRef.current < 50) return
+      // Increase minimum time between sounds based on game speed
+      const minTimeBetweenSounds = 50 * Math.max(1, gameSpeed / 2)
+      if (now - lastSoundTimeRef.current < minTimeBetweenSounds) return
 
       lastSoundTimeRef.current = now
 
       // Try to play the audio file
-      sound.currentTime = 0
-      sound.play().catch(() => {
-        // If audio file fails to play, use the fallback oscillator
-        fallback()
-      })
+      if (sound.readyState >= 2) { // Only play if loaded
+        sound.currentTime = 0
+        sound.play().catch(() => {
+          try {
+            fallback()
+          } catch (error) {
+            console.warn('Fallback sound failed:', error)
+          }
+        })
+      } else {
+        try {
+          fallback()
+        } catch (error) {
+          console.warn('Fallback sound failed:', error)
+        }
+      }
     }
 
     // Add sound playing functions to the window object for debugging
