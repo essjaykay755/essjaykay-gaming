@@ -11,8 +11,11 @@ export function CheatCodeWrapper() {
 
   const handleCheatActivated = (cheat: string) => {
     if (cheat === 'FASTER') {
-      setGameSpeed(4); // Change from 8x to 4x speed
+      setGameSpeed(4); // 4x speed
       setActiveCheat('4x Game Speed');
+    } else if (cheat === 'FASTEST') {
+      setGameSpeed(8); // 8x speed
+      setActiveCheat('8x Game Speed');
     }
   };
 

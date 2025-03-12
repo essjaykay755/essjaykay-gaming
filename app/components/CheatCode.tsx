@@ -24,8 +24,11 @@ export function CheatCode({ onCheatActivated }: CheatCodeProps) {
       }
       // Check for Enter key to submit cheat
       if (e.key === 'Enter' && isVisible) {
-        if (input.toUpperCase() === 'FASTER') {
+        const upperInput = input.toUpperCase();
+        if (upperInput === 'FASTER') {
           onCheatActivated('FASTER');
+        } else if (upperInput === 'FASTEST') {
+          onCheatActivated('FASTEST');
         }
         setIsVisible(false);
         setInput('');

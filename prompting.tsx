@@ -1,7 +1,8 @@
 "use client"
 
-import { useEffect, useRef } from "react"
+import { useEffect, useRef, useState } from "react"
 import { useGame } from '@/app/context/GameContext';
+import confetti from 'canvas-confetti';
 
 const COLOR = "#FFFFFF"
 const HIT_COLOR = "#333333"
@@ -173,6 +174,7 @@ interface SoundEffects {
 
 export function EssJayKayDev() {
   const { gameSpeed } = useGame();
+  const [showVictory, setShowVictory] = useState(false);
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const pixelsRef = useRef<Pixel[]>([])
   const ballRef = useRef<Ball>({ x: 0, y: 0, dx: 0, dy: 0, radius: 0 })
@@ -180,6 +182,7 @@ export function EssJayKayDev() {
   const scaleRef = useRef(1)
   const soundsRef = useRef<SoundEffects | null>(null)
   const lastSoundTimeRef = useRef(0)
+  const gameLoopRef = useRef<number>()
 
   useEffect(() => {
     // Initialize sound effects
@@ -401,6 +404,23 @@ export function EssJayKayDev() {
       ]
     }
 
+    const checkVictory = () => {
+      const allDestroyed = pixelsRef.current.every(pixel => pixel.hit);
+      if (allDestroyed && !showVictory) {
+        setShowVictory(true);
+        // Fire confetti
+        confetti({
+          particleCount: 100,
+          spread: 70,
+          origin: { y: 0.6 }
+        });
+        // Cancel the game loop
+        if (gameLoopRef.current) {
+          cancelAnimationFrame(gameLoopRef.current);
+        }
+      }
+    }
+
     const updateGame = () => {
       const ball = ballRef.current
       const paddles = paddlesRef.current
@@ -484,6 +504,9 @@ export function EssJayKayDev() {
           // Play a different pixel hit sound based on the pixel index
           const soundIndex = index % 5
           ;(window as any).playPixelSound(soundIndex)
+          
+          // Check for victory after each pixel hit
+          checkVictory();
         }
       })
     }
@@ -508,15 +531,44 @@ export function EssJayKayDev() {
       paddlesRef.current.forEach((paddle) => {
         ctx.fillRect(paddle.x, paddle.y, paddle.width, paddle.height)
       })
+
+      // Draw victory message if game is won
+      if (showVictory) {
+        ctx.font = "Press Start 2P, monospace"
+        ctx.textAlign = "center"
+        ctx.fillStyle = "#FFFFFF"
+        
+        const messages = [
+          "🎉 CONGRATULATIONS! 🎉",
+          "You've successfully destroyed EssJayKay.dev",
+          "by doing absolutely nothing...",
+          "The paddles did all the work while you",
+          "probably went to make Maggie.",
+          "But hey, at least you stayed idle like a pro!",
+          "",
+          "- Subhojit Karmakar"
+        ];
+
+        const fontSize = canvas.width * 0.02;
+        ctx.font = `${fontSize}px 'Press Start 2P'`;
+        const lineHeight = fontSize * 1.5;
+        const startY = (canvas.height - (messages.length * lineHeight)) / 2;
+
+        messages.forEach((message, i) => {
+          ctx.fillText(message, canvas.width / 2, startY + (i * lineHeight));
+        });
+      }
     }
 
     const gameLoop = () => {
-      // Run update multiple times based on game speed
-      for (let i = 0; i < gameSpeed; i++) {
-        updateGame()
+      if (!showVictory) { // Only update game if victory hasn't been achieved
+        // Run update multiple times based on game speed
+        for (let i = 0; i < gameSpeed; i++) {
+          updateGame()
+        }
       }
       drawGame()
-      requestAnimationFrame(gameLoop)
+      gameLoopRef.current = requestAnimationFrame(gameLoop)
     }
 
     resizeCanvas()
@@ -525,15 +577,20 @@ export function EssJayKayDev() {
 
     return () => {
       window.removeEventListener("resize", resizeCanvas)
+      if (gameLoopRef.current) {
+        cancelAnimationFrame(gameLoopRef.current)
+      }
     }
-  }, [gameSpeed])
+  }, [gameSpeed, showVictory])
 
   return (
-    <canvas
-      ref={canvasRef}
-      className="fixed top-0 left-0 w-full h-full"
-      aria-label="EssJayKay.dev: Fullscreen Pong game with pixel text"
-    />
+    <>
+      <canvas
+        ref={canvasRef}
+        className="fixed top-0 left-0 w-full h-full"
+        aria-label="EssJayKay.dev: Fullscreen Pong game with pixel text"
+      />
+    </>
   )
 }
 
