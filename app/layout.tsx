@@ -3,8 +3,8 @@ import './globals.css'
 
 export const metadata: Metadata = {
   title: 'EssJayKay Gaming',
-  description: 'Created with v0',
-  generator: 'v0.dev',
+  description: 'Your ultimate destination for gaming content and community',
+  generator: 'EssJayKay.dev',
 }
 
 export default function RootLayout({
