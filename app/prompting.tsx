@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react"
 import { useGame } from './context/GameContext';
+import { VictoryScreen } from './components/VictoryScreen';
 
 const COLOR = "#FFFFFF"
 const HIT_COLOR = "#1A1A1A"
@@ -143,6 +144,7 @@ export function EssJayKayDev() {
   const currentSpeedRef = useRef(1);
   const gameLoopRef = useRef<number>();
   const victoryCheckedRef = useRef(false);
+  const [audioInitialized, setAudioInitialized] = useState(false);
 
   const scale = 1;
   const LARGE_PIXEL_SIZE = 20 * scale;
@@ -154,10 +156,15 @@ export function EssJayKayDev() {
     currentSpeedRef.current = gameSpeed;
   }, [gameSpeed]);
 
-  // Function to initialize audio context
+  // Function to initialize audio context - only after user interaction
   const initializeAudioContext = () => {
-    if (!audioContextRef.current) {
-      audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
+    if (!audioContextRef.current && !audioInitialized) {
+      try {
+        audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
+        setAudioInitialized(true);
+      } catch (e) {
+        console.warn('AudioContext failed to initialize:', e);
+      }
     }
     return audioContextRef.current;
   };
@@ -391,6 +398,9 @@ export function EssJayKayDev() {
           if (gameLoopRef.current) {
             cancelAnimationFrame(gameLoopRef.current);
           }
+          // Clear the canvas completely
+          ctx.fillStyle = BACKGROUND_COLOR;
+          ctx.fillRect(0, 0, canvas.width, canvas.height);
           return;
         }
       }
@@ -488,32 +498,9 @@ export function EssJayKayDev() {
       ctx.fillStyle = BACKGROUND_COLOR;
       ctx.fillRect(0, 0, canvas.width, canvas.height);
 
+      // If victory achieved, don't draw anything else
       if (showVictory) {
-        // Draw victory screen
-        const messages = [
-          "🎉 CONGRATULATIONS! 🎉",
-          "You've successfully destroyed EssJayKay.dev",
-          "by doing absolutely nothing...",
-          "The paddles did all the work while you",
-          "probably went to make coffee.",
-          "But hey, at least you stayed idle like a pro!",
-          "",
-          "- Subhojit Karmakar"
-        ];
-
-        const fontSize = Math.min(canvas.width, canvas.height) * 0.02;
-        ctx.font = `${fontSize}px 'Press Start 2P'`;
-        const lineHeight = fontSize * 1.5;
-        const startY = (canvas.height - (messages.length * lineHeight)) / 2;
-
-        // Draw text
-        ctx.textAlign = "center";
-        ctx.fillStyle = "#FFFFFF";
-        
-        messages.forEach((message, i) => {
-          ctx.fillText(message, canvas.width / 2, startY + (i * lineHeight));
-        });
-        return; // Return early to not draw any game elements
+        return;
       }
 
       // Draw game components only if not in victory state
@@ -537,7 +524,9 @@ export function EssJayKayDev() {
     const gameLoop = () => {
       updateGame();
       drawGame();
-      gameLoopRef.current = requestAnimationFrame(gameLoop);
+      if (!showVictory) {
+        gameLoopRef.current = requestAnimationFrame(gameLoop);
+      }
     };
 
     resizeCanvas();
@@ -554,6 +543,25 @@ export function EssJayKayDev() {
     initializeAudioContext();
   };
 
+  // Return different UI based on game state
+  if (showVictory) {
+    // When the game is won, only show the victory message
+    return (
+      <div className="fixed inset-0 bg-black flex flex-col items-center justify-center">
+        <div className="text-white text-center font-['Press_Start_2P', monospace]">
+          <p className="text-2xl md:text-4xl mb-8">🎉 CONGRATULATIONS! 🎉</p>
+          <p className="text-lg md:text-xl mb-4">You've successfully destroyed EssJayKay.dev</p>
+          <p className="text-lg md:text-xl mb-4">by doing absolutely nothing...</p>
+          <p className="text-lg md:text-xl mb-4">The paddles did all the work while you</p>
+          <p className="text-lg md:text-xl mb-4">probably went to make Maggie.</p>
+          <p className="text-lg md:text-xl mb-4">But hey, at least you stayed idle like a pro!</p>
+          <p className="text-lg md:text-xl mt-16">- Subhojit Karmakar</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Otherwise only show the game canvas
   return (
     <canvas
       ref={canvasRef}

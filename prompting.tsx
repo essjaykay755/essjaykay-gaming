@@ -266,17 +266,17 @@ export function EssJayKayDev() {
       }
     }
 
-    // Add sound playing functions to the window object for debugging
-    ;(window as any).playPaddleSound = () => {
-      playSound(soundsRef.current!.paddleHit, paddleSound)
-    }
-    ;(window as any).playWallSound = () => {
-      playSound(soundsRef.current!.wallHit, wallSound)
-    }
-    ;(window as any).playPixelSound = (index = 0) => {
-      const soundIndex = index % pixelSounds.length
-      playSound(soundsRef.current!.pixelHits[soundIndex], pixelSounds[soundIndex])
-    }
+      // Add sound playing functions to the window object for debugging
+      ; (window as any).playPaddleSound = () => {
+        playSound(soundsRef.current!.paddleHit, paddleSound)
+      }
+      ; (window as any).playWallSound = () => {
+        playSound(soundsRef.current!.wallHit, wallSound)
+      }
+      ; (window as any).playPixelSound = (index = 0) => {
+        const soundIndex = index % pixelSounds.length
+        playSound(soundsRef.current!.pixelHits[soundIndex], pixelSounds[soundIndex])
+      }
 
     const canvas = canvasRef.current
     if (!canvas) return
@@ -435,13 +435,13 @@ export function EssJayKayDev() {
       // Check for wall collisions
       if (ball.y - ball.radius < 0 || ball.y + ball.radius > canvas.height) {
         ball.dy = -ball.dy
-        // Play wall hit sound
-        ;(window as any).playWallSound()
+          // Play wall hit sound
+          ; (window as any).playWallSound()
       }
       if (ball.x - ball.radius < 0 || ball.x + ball.radius > canvas.width) {
         ball.dx = -ball.dx
-        // Play wall hit sound
-        ;(window as any).playWallSound()
+          // Play wall hit sound
+          ; (window as any).playWallSound()
       }
 
       // Check for paddle collisions
@@ -454,8 +454,8 @@ export function EssJayKayDev() {
             ball.y < paddle.y + paddle.height
           ) {
             ball.dx = -ball.dx
-            // Play paddle hit sound
-            ;(window as any).playPaddleSound()
+              // Play paddle hit sound
+              ; (window as any).playPaddleSound()
           }
         } else {
           if (
@@ -465,8 +465,8 @@ export function EssJayKayDev() {
             ball.x < paddle.x + paddle.width
           ) {
             ball.dy = -ball.dy
-            // Play paddle hit sound
-            ;(window as any).playPaddleSound()
+              // Play paddle hit sound
+              ; (window as any).playPaddleSound()
           }
         }
       })
@@ -503,8 +503,8 @@ export function EssJayKayDev() {
 
           // Play a different pixel hit sound based on the pixel index
           const soundIndex = index % 5
-          ;(window as any).playPixelSound(soundIndex)
-          
+            ; (window as any).playPixelSound(soundIndex)
+
           // Check for victory after each pixel hit
           checkVictory();
         }
@@ -517,27 +517,29 @@ export function EssJayKayDev() {
       ctx.fillStyle = BACKGROUND_COLOR
       ctx.fillRect(0, 0, canvas.width, canvas.height)
 
-      pixelsRef.current.forEach((pixel) => {
-        ctx.fillStyle = pixel.hit ? HIT_COLOR : COLOR
-        ctx.fillRect(pixel.x, pixel.y, pixel.size, pixel.size)
-      })
+      if (!showVictory) {
+        pixelsRef.current.forEach((pixel) => {
+          ctx.fillStyle = pixel.hit ? HIT_COLOR : COLOR
+          ctx.fillRect(pixel.x, pixel.y, pixel.size, pixel.size)
+        })
 
-      ctx.fillStyle = BALL_COLOR
-      ctx.beginPath()
-      ctx.arc(ballRef.current.x, ballRef.current.y, ballRef.current.radius, 0, Math.PI * 2)
-      ctx.fill()
+        ctx.fillStyle = BALL_COLOR
+        ctx.beginPath()
+        ctx.arc(ballRef.current.x, ballRef.current.y, ballRef.current.radius, 0, Math.PI * 2)
+        ctx.fill()
 
-      ctx.fillStyle = PADDLE_COLOR
-      paddlesRef.current.forEach((paddle) => {
-        ctx.fillRect(paddle.x, paddle.y, paddle.width, paddle.height)
-      })
+        ctx.fillStyle = PADDLE_COLOR
+        paddlesRef.current.forEach((paddle) => {
+          ctx.fillRect(paddle.x, paddle.y, paddle.width, paddle.height)
+        })
+      }
 
       // Draw victory message if game is won
       if (showVictory) {
         ctx.font = "Press Start 2P, monospace"
         ctx.textAlign = "center"
         ctx.fillStyle = "#FFFFFF"
-        
+
         const messages = [
           "🎉 CONGRATULATIONS! 🎉",
           "You've successfully destroyed EssJayKay.dev",
