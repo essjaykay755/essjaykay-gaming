@@ -1,0 +1,26 @@
+re,
+        playerScore: state.playerScore,
+        countdown: state.countdown,
+        cpuMode: cpu.mode,
+        cpu: { x: cpu.x, y: cpu.y, energy: cpu.energy },
+        player: { x: player.x, y: player.y, energy: player.energy },
+        puck: { x: puck.x, y: puck.y, vx: puck.vx, vy: puck.vy, lastTouch: puck.lastTouch },
+        kickoffDistances: {
+          cpu: Math.hypot(cpu.x - puck.x, cpu.y - puck.y),
+          player: Math.hypot(player.x - puck.x, player.y - puck.y),
+        },
+      }),
+      forceGoal: (scorer = 'player') => scoreGoal(scorer),
+      skipCountdown: () => { state.phase = 'play'; state.countdown = 0; },
+      reset: () => resetPositions(true),
+      setPuck: (x, y, vx = 0, vy = 0) => Object.assign(puck, { x, y, vx, vy }),
+      dash: () => { input.dashQueued = true; },
+    };
+  } catch (error) {
+    console.error(error);
+    loadError.hidden = false;
+  }
+}
+
+init();
+requestAnimationFrame(loop);
