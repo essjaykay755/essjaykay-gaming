@@ -1,0 +1,260 @@
+const size = 54 + clamp(speed / 28, 0, 36);
+  sprite.scale.set(size, size, 1);
+  setWorldPosition(sprite, puck.x, puck.y, 4);
+  world.add(sprite);
+  puckTrails.push({ sprite, life: .35, maxLife: .35 });
+}
+
+function spawnGoalWave(side, color) {
+  const x = side === 'left' ? GOAL.leftLine + 12 : GOAL.rightLine - 12;
+  const y = CENTER_Y;
+  for (let i = 0; i < 4; i += 1) {
+    const material = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: .75 - i * .12, depthWrite: false });
+    const mesh = new THREE.Mesh(new THREE.RingGeometry(50, 59, 64), material);
+    mesh.scale.set(.45 + i * .12, .85 + i * .15, 1);
+    setWorldPosition(mesh, x, y, 6);
+    world.add(mesh);
+    goalWaves.push({ mesh, life: .75 + i * .08, maxLife: .75 + i * .08, delay: i * .06, side });
+  }
+}
+
+function showCountdown(text, go = false) {
+  countdownEl.textContent = text;
+  countdownEl.classList.toggle('go', go);
+  countdownEl.classList.remove('visible');
+  void countdownEl.offsetWidth;
+  countdownEl.classList.add('visible');
+  if (text === '3') tone(460, .08, 'triangle', .035, 40);
+  else if (text === '2') tone(520, .08, 'triangle', .035, 40);
+  else if (text === '1') tone(590, .08, 'triangle', .04, 60);
+  else tone(760, .18, 'square', .045, 300);
+}
+
+function resetPositions(withCountdown = true) {
+  Object.assign(player, { x: CENTER_X + START_DISTANCE, y: CENTER_Y, vx: 0, vy: 0, angle: Math.PI, energy: 1, dashTime: 0, dashCooldown: 0 });
+  Object.assign(cpu, { x: CENTER_X - START_DISTANCE, y: CENTER_Y, vx: 0, vy: 0, angle: 0, energy: 1, dashTime: 0, dashCooldown: 0, mode: 'kickoff', decisionTimer: 0, targetX: CENTER_X - START_DISTANCE, targetY: CENTER_Y });
+  Object.assign(puck, { x: CENTER_X, y: CENTER_Y, vx: 0, vy: 0, angle: 0, impact: 0, lastTouch: 'neutral' });
+  puck.tint.set(0xffffff);
+  if (puckVisual) puckVisual.mesh.material.color.copy(puck.tint);
+  input.pointerX = CENTER_X;
+  input.pointerY = CENTER_Y;
+  if (withCountdown) {
+    state.phase = 'countdown';
+    state.countdown = 3.25;
+    state.nextCountdownBeat = 3;
+    showCountdown('3');
+  } else {
+    state.phase = 'play';
+  }
+}
+
+function triggerDash(entity, visual, dx, dy, color) {
+  if (entity.energy < .34 || entity.dashCooldown > 0 || state.phase !== 'play') return false;
+  const [nx, ny] = normalize(dx, dy);
+  entity.vx += nx * 800;
+  entity.vy += ny * 800;
+  entity.energy -= .34;
+  entity.dashTime = .31;
+  entity.dashCooldown = .3;
+  entity.angle = Math.atan2(ny, nx);
+  visual.orbit.visible = true;
+  spawnAfterimage(visual, color);
+  for (let i = 0; i < 5; i += 1) {
+    spawnRing(entity.x - nx * i * 18, entity.y - ny * i * 18, color, { scale: .58 + i * .03, life: .32 + i * .02, grow: 1.45, opacity: .5 - i * .045, driftX: -nx * 45, driftY: -ny * 45 });
+  }
+  spawnParticle(entity.x, entity.y, color, 12, 250, 'glow');
+  state.shake = Math.max(state.shake, 5.5);
+  tone(entity === player ? 640 : 520, .11, 'sawtooth', .04, -190);
+  return true;
+}
+
+function updatePlayer(dt) {
+  let dx = 0;
+  let dy = 0;
+  if (input.keys.has('ArrowLeft') || input.keys.has('a')) dx -= 1;
+  if (input.keys.has('ArrowRight') || input.keys.has('d')) dx += 1;
+  if (input.keys.has('ArrowUp') || input.keys.has('w')) dy -= 1;
+  if (input.keys.has('ArrowDown') || input.keys.has('s')) dy += 1;
+  if (dx || dy) {
+    [dx, dy] = normalize(dx, dy);
+    const speed = player.dashTime > 0 ? 800 : 475;
+    player.vx = damp(player.vx, dx * speed, player.dashTime > 0 ? 4 : 10, dt);
+    player.vy = damp(player.vy, dy * speed, player.dashTime > 0 ? 4 : 10, dt);
+  } else {
+    player.vx = damp(player.vx, 0, player.dashTime > 0 ? 1.8 : 8.5, dt);
+    player.vy = damp(player.vy, 0, player.dashTime > 0 ? 1.8 : 8.5, dt);
+  }
+  const aimX = input.pointerX - player.x;
+  const aimY = input.pointerY - player.y;
+  if (Math.hypot(aimX, aimY) > 5) player.angle += shortestAngle(player.angle, Math.atan2(aimY, aimX)) * Math.min(1, dt * 14);
+  if (input.dashQueued) {
+    triggerDash(player, playerVisual, aimX, aimY, 0xe8ef68);
+    input.dashQueued = false;
+  }
+}
+
+function predictPuck(seconds) {
+  let x = puck.x + puck.vx * seconds;
+  let y = puck.y + puck.vy * seconds;
+  if (y < COURT.top + PUCK_RADIUS) y = COURT.top + PUCK_RADIUS + (COURT.top + PUCK_RADIUS - y);
+  if (y > COURT.bottom - PUCK_RADIUS) y = COURT.bottom - PUCK_RADIUS - (y - (COURT.bottom - PUCK_RADIUS));
+  return { x, y };
+}
+
+function chooseCpuTarget() {
+  const puckSpeed = length(puck.vx, puck.vy);
+  const puckMovingToCpu = puck.vx < -100;
+  const danger = puck.x < 720 || (puckMovingToCpu && puck.x < 1030);
+  const emergency = puck.x < 500 || (puckMovingToCpu && puck.x < 690 && Math.abs(puck.y - CENTER_Y) < 245);
+  const playerControl = Math.hypot(player.x - puck.x, player.y - puck.y) < 145 && player.x < puck.x + 35;
+
+  if (emergency) cpu.mode = 'clear';
+  else if (danger) cpu.mode = 'intercept';
+  else if (playerControl) cpu.mode = 'challenge';
+  else if (puck.x > 1270 && puck.vx > 100) cpu.mode = 'support';
+  else cpu.mode = 'attack';
+
+  if (cpu.mode === 'clear') {
+    const pred = predictPuck(clamp((puck.x - GOAL.leftLine) / Math.max(250, -puck.vx), .08, .52));
+    cpu.targetX = clamp(pred.x - 65, 345, 635);
+    cpu.targetY = clamp(pred.y, GOAL.top + 45, GOAL.bottom - 45);
+  } else if (cpu.mode === 'intercept') {
+    const pred = predictPuck(.3 + clamp(puckSpeed / 2600, 0, .18));
+    const goalVector = normalize(pred.x - GOAL.leftLine, pred.y - CENTER_Y);
+    cpu.targetX = clamp(pred.x - goalVector[0] * 70, 380, 920);
+    cpu.targetY = clamp(pred.y - goalVector[1] * 45, COURT.top + 65, COURT.bottom - 65);
+  } else if (cpu.mode === 'challenge') {
+    const playerToPuck = normalize(puck.x - player.x, puck.y - player.y);
+    cpu.targetX = puck.x - playerToPuck[0] * 95;
+    cpu.targetY = puck.y - playerToPuck[1] * 95;
+  } else {
+    const pred = predictPuck(.18);
+    const targetGoalX = GOAL.rightLine + 35;
+    const targetGoalY = CENTER_Y + clamp((CENTER_Y - player.y) * .22, -82, 82);
+    const shotX = targetGoalX - pred.x;
+    const shotY = targetGoalY - pred.y;
+    const [sx, sy] = normalize(shotX, shotY);
+    const behind = cpu.mode === 'support' ? 128 : 108;
+    cpu.targetX = pred.x - sx * behind;
+    cpu.targetY = pred.y - sy * behind;
+    if (player.x > puck.x && Math.abs(player.y - puck.y) < 145) {
+      cpu.targetY += player.y < CENTER_Y ? 115 : -115;
+    }
+  }
+
+  cpu.targetX = clamp(cpu.targetX, COURT.left + PLAYER_RADIUS, COURT.right - PLAYER_RADIUS);
+  cpu.targetY = clamp(cpu.targetY, COURT.top + PLAYER_RADIUS, COURT.bottom - PLAYER_RADIUS);
+}
+
+function updateCpu(dt) {
+  cpu.decisionTimer -= dt;
+  if (cpu.decisionTimer <= 0) {
+    chooseCpuTarget();
+    cpu.decisionTimer = .065 + Math.random() * .025;
+  }
+  let dx = cpu.targetX - cpu.x;
+  let dy = cpu.targetY - cpu.y;
+  let dist = Math.hypot(dx, dy);
+  [dx, dy] = normalize(dx, dy);
+  const maxSpeed = cpu.mode === 'clear' ? 560 : cpu.mode === 'intercept' ? 520 : 470;
+  const desiredSpeed = Math.min(maxSpeed, dist * 4.3 + 80);
+  cpu.vx = damp(cpu.vx, dx * desiredSpeed, cpu.dashTime > 0 ? 3.2 : 8.2, dt);
+  cpu.vy = damp(cpu.vy, dy * desiredSpeed, cpu.dashTime > 0 ? 3.2 : 8.2, dt);
+  cpu.angle += shortestAngle(cpu.angle, Math.atan2(dy, dx)) * Math.min(1, dt * 12);
+
+  const toPuckX = puck.x - cpu.x;
+  const toPuckY = puck.y - cpu.y;
+  const puckDistance = Math.hypot(toPuckX, toPuckY);
+  const puckAngle = Math.atan2(toPuckY, toPuckX);
+  const alignment = Math.abs(shortestAngle(cpu.angle, puckAngle));
+  const hasLane = !(
+    player.x > cpu.x && player.x < puck.x + 220 &&
+    Math.abs(player.y - lerp(cpu.y, puck.y, clamp((player.x - cpu.x) / Math.max(1, puck.x - cpu.x), 0, 1))) < 95
+  );
+  const clearDash = cpu.mode === 'clear' && puckDistance < 245;
+  const attackDash = cpu.mode === 'attack' && puckDistance < 190 && alignment < .36 && hasLane;
+  const interceptDash = cpu.mode === 'intercept' && puckDistance < 175 && puck.vx < -80;
+  const challengeDash = cpu.mode === 'challenge' && puckDistance < 150 && alignment < .5;
+  if ((clearDash || attackDash || interceptDash || challengeDash) && cpu.energy > .38 && cpu.dashCooldown <= 0) {
+    triggerDash(cpu, cpuVisual, toPuckX, toPuckY, 0x5ce5e3);
+  }
+}
+
+function updateEntity(entity, visual, dt, isPlayer) {
+  entity.x += entity.vx * dt;
+  entity.y += entity.vy * dt;
+  entity.dashTime = Math.max(0, entity.dashTime - dt);
+  entity.dashCooldown = Math.max(0, entity.dashCooldown - dt);
+  entity.energy = Math.min(1, entity.energy + dt * .205);
+  entity.x = clamp(entity.x, COURT.left + PLAYER_RADIUS, COURT.right - PLAYER_RADIUS);
+  entity.y = clamp(entity.y, COURT.top + PLAYER_RADIUS, COURT.bottom - PLAYER_RADIUS);
+  if (entity.x === COURT.left + PLAYER_RADIUS && entity.vx < 0) entity.vx *= -.2;
+  if (entity.x === COURT.right - PLAYER_RADIUS && entity.vx > 0) entity.vx *= -.2;
+  if (entity.y === COURT.top + PLAYER_RADIUS && entity.vy < 0) entity.vy *= -.2;
+  if (entity.y === COURT.bottom - PLAYER_RADIUS && entity.vy > 0) entity.vy *= -.2;
+
+  const speed = length(entity.vx, entity.vy);
+  const stretch = clamp(speed / 1050, 0, .42);
+  const targetScaleX = 1 + stretch;
+  const targetScaleY = 1 - stretch * .47;
+  visual.squashX = damp(visual.squashX, targetScaleX, 14, dt);
+  visual.squashY = damp(visual.squashY, targetScaleY, 14, dt);
+  visual.group.rotation.z = -entity.angle;
+  visual.mesh.scale.set(visual.squashX, visual.squashY, 1);
+  visual.shadow.scale.set(visual.visualW * .9 * (1 + stretch * .18), visual.visualH * .56 * (1 - stretch * .15), 1);
+  visual.orbit.visible = entity.dashTime > 0;
+  visual.orbitSpin += dt * (entity === player ? 8.8 : -8.2);
+  visual.orbit.rotation.z = visual.orbitSpin;
+  visual.orbit.scale.setScalar(1 + Math.sin(performance.now() * .02) * .035);
+  setWorldPosition(visual.group, entity.x, entity.y, 7);
+
+  entity.lastTrail -= dt;
+  if (entity.dashTime > 0 && entity.lastTrail <= 0) {
+    const [nx, ny] = normalize(entity.vx, entity.vy);
+    spawnRing(entity.x - nx * 28, entity.y - ny * 28, isPlayer ? 0xe9ef6c : 0x5de4e2, { scale: .72, life: .38, grow: 1.35, opacity: .55, driftX: -nx * 38, driftY: -ny * 38 });
+    spawnAfterimage(visual, isPlayer ? 0xf2ef91 : 0x9aefec);
+    entity.lastTrail = .07;
+  }
+}
+
+function resolvePlayerCollision() {
+  const dx = player.x - cpu.x;
+  const dy = player.y - cpu.y;
+  const d = Math.hypot(dx, dy);
+  const min = PLAYER_RADIUS * 1.75;
+  if (d >= min || d === 0) return;
+  const nx = dx / d;
+  const ny = dy / d;
+  const overlap = min - d;
+  player.x += nx * overlap * .5;
+  player.y += ny * overlap * .5;
+  cpu.x -= nx * overlap * .5;
+  cpu.y -= ny * overlap * .5;
+  const rel = (player.vx - cpu.vx) * nx + (player.vy - cpu.vy) * ny;
+  if (rel < 0) {
+    const impulse = -rel * .62 + 110;
+    player.vx += nx * impulse;
+    player.vy += ny * impulse;
+    cpu.vx -= nx * impulse;
+    cpu.vy -= ny * impulse;
+  }
+}
+
+function collidePuck(entity, visual, owner, color) {
+  const dx = puck.x - entity.x;
+  const dy = puck.y - entity.y;
+  const d = Math.hypot(dx, dy);
+  const minimum = PLAYER_RADIUS + PUCK_RADIUS;
+  if (d >= minimum || d === 0) return;
+  const nx = dx / d;
+  const ny = dy / d;
+  puck.x = entity.x + nx * minimum;
+  puck.y = entity.y + ny * minimum;
+  const relative = (entity.vx - puck.vx) * nx + (entity.vy - puck.vy) * ny;
+  const dashBoost = entity.dashTime > 0 ? 550 : 0;
+  const impulse = Math.max(310, relative * 1.18 + 330 + dashBoost);
+  puck.vx = nx * impulse + entity.vx * .38;
+  puck.vy = ny * impulse + entity.vy * .38;
+  puck.lastTouch = owner;
+  puck.tint.set(color);
+  puck
