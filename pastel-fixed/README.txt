@@ -1,0 +1,1 @@
+Pastel Disc Arena verified static source. Binary assets are committed separately and validated by SHA-256 before deployment.
